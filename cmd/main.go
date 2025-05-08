@@ -1,0 +1,75 @@
+package main
+
+import (
+	"log"
+	"net/http"
+	"myapp/internal/api"  // Pastikan path impor sesuai dengan folder proyek kamu
+	"github.com/rs/cors"
+	"github.com/gorilla/mux"
+)
+
+func main() {
+	// Membuat router
+	r := mux.NewRouter()
+
+	// Menangani route untuk /guru/{id}
+	r.HandleFunc("/guru/{id}", api.GetGuruByIDHandler).Methods("GET")
+	r.HandleFunc("/siswa/{id}", api.GetSiswaByIDHandler).Methods("GET")
+	r.HandleFunc("/kelas/{id}", api.GetKelasByIDHandler).Methods("GET")
+	r.HandleFunc("/matapelajaran/{id}", api.GetMataPelajaranByIDHandler).Methods("GET")
+
+	// Menghubungkan route dengan handler
+	r.HandleFunc("/guru", api.CreateGuruHandler).Methods("POST")
+	r.HandleFunc("/guru", api.GetGuruHandler).Methods("GET")
+	r.HandleFunc("/guru/{id}", api.UpdateGuruHandler).Methods("PUT")
+	r.HandleFunc("/guru/{id}", api.DeleteGuruHandler).Methods("DELETE")
+
+
+	r.HandleFunc("/siswa", api.GetSiswaHandler).Methods("GET")
+	r.HandleFunc("/siswa", api.CreateSiswaHandler).Methods("POST")
+	r.HandleFunc("/siswa/{id}", api.UpdateSiswaHandler).Methods("PUT")
+	r.HandleFunc("/siswa/{id}", api.DeleteSiswaHandler).Methods("DELETE")
+
+	r.HandleFunc("/kelas", api.GetKelasHandler).Methods("GET")
+	r.HandleFunc("/kelas", api.CreateKelasHandler).Methods("POST")
+	r.HandleFunc("/kelas/{id}", api.UpdateKelasHandler).Methods("PUT")
+	r.HandleFunc("/kelas/{id}", api.DeleteKelasHandler).Methods("DELETE")
+
+	r.HandleFunc("/matapelajaran", api.GetMataPelajaranHandler).Methods("GET")
+	r.HandleFunc("/matapelajaran", api.CreateMataPelajaranHandler).Methods("POST")
+	r.HandleFunc("/matapelajaran/{id}", api.UpdateMataPelajaranHandler).Methods("PUT")
+	r.HandleFunc("/matapelajaran/{id}", api.DeleteMataPelajaranHandler).Methods("DELETE")
+
+	r.HandleFunc("/matapelajaran/bykelas/{id}", api.GetMataPelajaranByKelasHandler).Methods("GET")
+
+	r.HandleFunc("/kelas/guru/{id_guru}", api.GetKelasByGuru).Methods("GET")
+
+	r.HandleFunc("/guru/user/{id_user}", api.GetGuruByUserIDHandler).Methods("GET")
+
+	r.HandleFunc("/kelass/{id_kelas}", api.GetKelasWithSubjects).Methods("GET")
+
+	r.HandleFunc("/siswaa/{id_kelas}", api.GetSiswaByKelas).Methods("GET")
+	
+
+	r.HandleFunc("/login", api.LoginHandler)
+
+
+
+	// Menambahkan CORS middleware
+	c := cors.New(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:3000"}, // Ganti dengan URL frontend Anda
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"*"},
+		AllowCredentials: true,
+	})
+
+	// Menambahkan middleware CORS
+	handler := c.Handler(r)
+
+	// Menjalankan server di port 8080
+	log.Println("Server is running on port 8080...")
+	err := http.ListenAndServe(":8080", handler)
+	if err != nil {
+		log.Fatal("Error starting server: ", err)
+	}
+}
