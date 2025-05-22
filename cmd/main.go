@@ -45,10 +45,28 @@ func main() {
 	r.HandleFunc("/kelas/guru/{id_guru}", api.GetKelasByGuru).Methods("GET")
 
 	r.HandleFunc("/guru/user/{id_user}", api.GetGuruByUserIDHandler).Methods("GET")
+	r.HandleFunc("/siswa/user/{id_user}", api.GetSiswaByUserIDHandler).Methods("GET")
+
+	r.HandleFunc("/matapelajaran/siswa/{id_siswa}", api.GetMataPelajaranBySiswaIDHandler).Methods("GET")
 
 	r.HandleFunc("/kelass/{id_kelas}", api.GetKelasWithSubjects).Methods("GET")
 
 	r.HandleFunc("/siswaa/{id_kelas}", api.GetSiswaByKelas).Methods("GET")
+
+	r.HandleFunc("/mapel/simple-detail/{id_mapel}", api.GetSimpleSubjectDetailHandler).Methods("GET")
+
+	r.HandleFunc("/siswa/by-mapel/{id_mapel}", api.GetStudentsByMapelID).Methods("GET")
+
+	r.HandleFunc("/nilai-detail", api.GetPenilaianBySiswaAndMapelHandler).Methods("GET")
+
+	r.HandleFunc("/penilaian", api.CreatePenilaianHandler).Methods("POST")
+	r.HandleFunc("/penilaian", api.GetPenilaianHandler).Methods("GET")
+	r.HandleFunc("/penilaian/{id}", api.UpdatePenilaianHandler).Methods("PUT")
+	r.HandleFunc("/penilaian/{id}", api.DeletePenilaianHandler).Methods("DELETE")
+
+	
+
+
 	
 
 	r.HandleFunc("/login", api.LoginHandler)

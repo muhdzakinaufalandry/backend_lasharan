@@ -10,6 +10,7 @@ import (
     "database/sql"
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 // GetGuruHandler - Mendapatkan semua data guru
@@ -854,6 +855,42 @@ func GetGuruByUserIDHandler(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(map[string]int{"id_guru": idGuru})
 }
 
+// Handler untuk mendapatkan id_siswa berdasarkan id_user
+func GetSiswaByUserIDHandler(w http.ResponseWriter, r *http.Request) {
+    vars := mux.Vars(r)
+    idUserStr := vars["id_user"]
+
+    // Konversi id_user dari string ke integer
+    idUser, err := strconv.Atoi(idUserStr)
+    if err != nil {
+        http.Error(w, "id_user harus berupa angka", http.StatusBadRequest)
+        return
+    }
+
+    dbConn, err := db.ConnectToDB()
+    if err != nil {
+        http.Error(w, "Gagal konek database", http.StatusInternalServerError)
+        return
+    }
+    defer dbConn.Close()
+
+    // Query untuk mengambil id_siswa berdasarkan id_user
+    var idSiswa int
+    err = dbConn.QueryRow("SELECT id_siswa FROM siswa WHERE id_user = $1", idUser).Scan(&idSiswa)
+    if err != nil {
+        if err == sql.ErrNoRows {
+            http.Error(w, "Siswa tidak ditemukan", http.StatusNotFound)
+        } else {
+            http.Error(w, "Query error", http.StatusInternalServerError)
+        }
+        return
+    }
+
+    // Kirim id_siswa sebagai response
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]int{"id_siswa": idSiswa})
+}
+
 func GetKelasWithSubjects(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	idKelasStr := vars["id_kelas"]
@@ -965,6 +1002,420 @@ func GetSiswaByKelas(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(siswaList)
 }
+
+func GetMataPelajaranBySiswaIDHandler(w http.ResponseWriter, r *http.Request) {
+    vars := mux.Vars(r)
+    idSiswa := vars["id_siswa"]
+
+    dbConn, err := db.ConnectToDB()
+    if err != nil {
+        http.Error(w, "Database connection error", http.StatusInternalServerError)
+        return
+    }
+    defer dbConn.Close()
+
+    query := `
+        SELECT mp.id_mapel, mp.id_kelas, mp.nama_mata_pelajaran
+        FROM siswa s
+        JOIN mata_pelajaran mp ON s.id_kelas = mp.id_kelas
+        WHERE s.id_siswa = $1
+    `
+    rows, err := dbConn.Query(query, idSiswa)
+    if err != nil {
+        http.Error(w, "Query error", http.StatusInternalServerError)
+        return
+    }
+    defer rows.Close()
+
+    var results []models.MataPelajaran
+    for rows.Next() {
+        var mp models.MataPelajaran
+        if err := rows.Scan(&mp.IDMapel, &mp.IDKelas, &mp.NamaMataPelajaran); err != nil {
+            log.Println("Scan error:", err)
+            continue
+        }
+        results = append(results, mp)
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(results)
+}
+
+func GetSimpleSubjectDetailHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	idMapelStr := vars["id_mapel"]
+	idMapel, err := strconv.Atoi(idMapelStr)
+	if err != nil {
+		http.Error(w, "ID mapel tidak valid", http.StatusBadRequest)
+		return
+	}
+
+	dbConn, err := db.ConnectToDB()
+	if err != nil {
+		http.Error(w, "Gagal koneksi ke database", http.StatusInternalServerError)
+		return
+	}
+	defer dbConn.Close()
+
+	query := `
+		SELECT mp.nama_mata_pelajaran, g.nama_guru, k.tahun_ajaran, k.id_kelas
+		FROM mata_pelajaran mp
+		JOIN kelas k ON mp.id_kelas = k.id_kelas
+		JOIN guru g ON k.id_guru = g.id_guru
+		WHERE mp.id_mapel = $1
+	`
+
+	var (
+		namaMapel, namaGuru, tahunAjaran string
+		idKelas                          int
+	)
+
+	err = dbConn.QueryRow(query, idMapel).Scan(&namaMapel, &namaGuru, &tahunAjaran, &idKelas)
+	if err != nil {
+		http.Error(w, "Data tidak ditemukan", http.StatusNotFound)
+		return
+	}
+
+	var jumlahSiswa int
+	err = dbConn.QueryRow(`SELECT COUNT(*) FROM siswa WHERE id_kelas = $1`, idKelas).Scan(&jumlahSiswa)
+	if err != nil {
+		jumlahSiswa = 0
+	}
+
+	// Tambahkan id_mapel ke dalam response
+	response := map[string]interface{}{
+		"id_mapel":            idMapel,
+		"nama_mata_pelajaran": namaMapel,
+		"nama_guru":           namaGuru,
+		"tahun_ajaran":        tahunAjaran,
+		"jumlah_siswa":        jumlahSiswa,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func GetStudentsByMapelID(w http.ResponseWriter, r *http.Request) {
+	// Ambil id_mapel dari query parameter
+	vars := mux.Vars(r)
+	idMapelStr := vars["id_mapel"]
+
+	idMapel, err := strconv.Atoi(idMapelStr)
+	if err != nil {
+		http.Error(w, "ID mapel tidak valid", http.StatusBadRequest)
+		return
+	}
+
+	// Koneksi ke database
+	dbConn, err := db.ConnectToDB()
+	if err != nil {
+		http.Error(w, "Gagal koneksi ke database", http.StatusInternalServerError)
+		return
+	}
+	defer dbConn.Close()
+
+	// Ambil id_kelas dari tabel mata_pelajaran
+	var idKelas int
+	err = dbConn.QueryRow(`SELECT id_kelas FROM mata_pelajaran WHERE id_mapel = $1`, idMapel).Scan(&idKelas)
+	if err != nil {
+		http.Error(w, "Mapel tidak ditemukan", http.StatusNotFound)
+		return
+	}
+
+	// Ambil data siswa berdasarkan id_kelas
+	rows, err := dbConn.Query(`
+		SELECT id_siswa, id_kelas, id_user, nama_siswa, alamat, tanggal_lahir 
+		FROM siswa 
+		WHERE id_kelas = $1
+	`, idKelas)
+	if err != nil {
+		http.Error(w, "Gagal mengambil data siswa", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var siswaList []models.Siswa
+
+	for rows.Next() {
+		var s models.Siswa
+		err := rows.Scan(&s.IDSiswa, &s.IDKelas, &s.IDUser, &s.NamaSiswa, &s.Alamat, &s.TanggalLahir)
+		if err != nil {
+			http.Error(w, "Gagal membaca data siswa", http.StatusInternalServerError)
+			return
+		}
+		siswaList = append(siswaList, s)
+	}
+
+	// Encode hasil ke JSON
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(siswaList)
+}
+
+
+func GetPenilaianBySiswaAndMapelHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	idSiswa := r.URL.Query().Get("id_siswa")
+	idMapel := r.URL.Query().Get("id_mapel")
+
+	if idSiswa == "" || idMapel == "" {
+		http.Error(w, "Missing id_siswa or id_mapel", http.StatusBadRequest)
+		return
+	}
+
+	dbConn, err := db.ConnectToDB()
+	if err != nil {
+		http.Error(w, "Gagal koneksi ke database", http.StatusInternalServerError)
+		return
+	}
+	defer dbConn.Close()
+
+	var idNilai int
+	var totalNilai string
+
+	err = dbConn.QueryRow(`
+		SELECT id_nilai, total_nilai 
+		FROM nilai 
+		WHERE id_siswa = $1 AND id_mapel = $2
+	`, idSiswa, idMapel).Scan(&idNilai, &totalNilai)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			json.NewEncoder(w).Encode(models.PenilaianResponse{
+				PenilaianList: []models.Penilaian{},
+				TotalNilai:    "0",
+			})
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	rows, err := dbConn.Query(`
+		SELECT id_penilaian, nama_nilai, nilai, bobot 
+		FROM penilaian 
+		WHERE id_nilai = $1
+	`, idNilai)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var penilaianList []models.Penilaian
+	for rows.Next() {
+		var idPenilaian int
+		var namaNilai string
+		var nilai int
+		var bobot float64
+
+		if err := rows.Scan(&idPenilaian, &namaNilai, &nilai, &bobot); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		penilaianList = append(penilaianList, models.Penilaian{
+			IDPenilaian: idPenilaian,
+			IDNilai:     idNilai, // ✅ tambahkan IDNilai dari hasil query sebelumnya
+			NamaNilai:   namaNilai,
+			Nilai:       nilai,
+			Bobot:       fmt.Sprintf("%.2f%%", bobot*100),
+			Range:       "0 - 100",
+		})
+	}
+
+	response := models.PenilaianResponse{
+		PenilaianList: penilaianList,
+		TotalNilai:    totalNilai,
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+
+
+func CreatePenilaianHandler(w http.ResponseWriter, r *http.Request) {
+	dbConn, err := db.ConnectToDB()
+	if err != nil {
+		http.Error(w, "Gagal koneksi ke database", http.StatusInternalServerError)
+		return
+	}
+	defer dbConn.Close()
+
+	var penilaian models.Penilaian
+	if err := json.NewDecoder(r.Body).Decode(&penilaian); err != nil {
+		http.Error(w, "Gagal membaca data", http.StatusBadRequest)
+		return
+	}
+
+	// Pastikan id_nilai valid (FK constraint)
+	var exists bool
+	err = dbConn.QueryRow("SELECT EXISTS(SELECT 1 FROM nilai WHERE id_nilai = $1)", penilaian.IDNilai).Scan(&exists)
+	if err != nil {
+		http.Error(w, "Gagal mengecek id_nilai", http.StatusInternalServerError)
+		return
+	}
+	if !exists {
+		http.Error(w, "id_nilai tidak ditemukan", http.StatusBadRequest)
+		return
+	}
+
+	// Convert bobot string ke float (e.g. "20.00%" => 0.2)
+	bobotFloat, err := strconv.ParseFloat(strings.TrimSuffix(penilaian.Bobot, "%"), 64)
+	if err != nil {
+		http.Error(w, "Format bobot salah", http.StatusBadRequest)
+		return
+	}
+	bobotFloat = bobotFloat / 100
+
+	// Insert dan ambil id_penilaian yang baru
+	var idPenilaian int
+	err = dbConn.QueryRow(`
+		INSERT INTO penilaian (id_nilai, nama_nilai, nilai, bobot)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id_penilaian
+	`, penilaian.IDNilai, penilaian.NamaNilai, penilaian.Nilai, bobotFloat).Scan(&idPenilaian)
+
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Insert error: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Siapkan response JSON
+	response := models.Penilaian{
+		IDPenilaian: idPenilaian,
+		IDNilai:     penilaian.IDNilai,
+		NamaNilai:   penilaian.NamaNilai,
+		Nilai:       penilaian.Nilai,
+		Bobot:       fmt.Sprintf("%.2f%%", bobotFloat*100), // kembalikan ke format string persen
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(response)
+}
+
+
+
+func UpdatePenilaianHandler(w http.ResponseWriter, r *http.Request) {
+	database, err := db.ConnectToDB()
+	if err != nil {
+		http.Error(w, "Error connecting to the database", http.StatusInternalServerError)
+		return
+	}
+	defer database.Close()
+
+	id := mux.Vars(r)["id"] // id_penilaian
+
+	var penilaian models.Penilaian
+	if err := json.NewDecoder(r.Body).Decode(&penilaian); err != nil {
+		http.Error(w, "Error parsing request body", http.StatusBadRequest)
+		return
+	}
+
+	// Konversi string bobot (misal: "20.00%") ke float64
+	bobotFloat, err := strconv.ParseFloat(strings.TrimSuffix(penilaian.Bobot, "%"), 64)
+	if err != nil {
+		http.Error(w, "Format bobot salah", http.StatusBadRequest)
+		return
+	}
+	bobotFloat = bobotFloat / 100 // Ubah jadi bentuk desimal: 20% → 0.2
+
+	_, err = database.Exec(`
+		UPDATE penilaian 
+		SET nama_nilai=$1, nilai=$2, bobot=$3 
+		WHERE id_penilaian=$4`,
+		penilaian.NamaNilai, penilaian.Nilai, bobotFloat, id,
+	)
+	if err != nil {
+		http.Error(w, "Error updating data in the database", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Penilaian berhasil diperbarui",
+	})
+}
+
+
+func DeletePenilaianHandler(w http.ResponseWriter, r *http.Request) {
+	database, err := db.ConnectToDB()
+	if err != nil {
+		http.Error(w, "Error connecting to the database", http.StatusInternalServerError)
+		return
+	}
+	defer database.Close()
+
+	id := mux.Vars(r)["id"]
+	log.Println("Deleting penilaian with ID:", id)
+
+	result, err := database.Exec("DELETE FROM penilaian WHERE id_penilaian=$1", id)
+	if err != nil {
+		log.Println("Error deleting from database:", err)
+		http.Error(w, "Error deleting data from the database", http.StatusInternalServerError)
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		log.Println("Error checking rows affected:", err)
+		http.Error(w, "Error checking affected rows", http.StatusInternalServerError)
+		return
+	}
+
+	if rowsAffected == 0 {
+		log.Println("No penilaian found with ID:", id)
+		http.Error(w, "Penilaian not found", http.StatusNotFound)
+		return
+	}
+
+	log.Println("Penilaian successfully deleted with ID:", id)
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Penilaian berhasil dihapus"))
+}
+
+// GetPenilaianHandler - Mendapatkan semua data guru
+func GetPenilaianHandler(w http.ResponseWriter, r *http.Request) {
+	database, err := db.ConnectToDB()
+	if err != nil {
+		http.Error(w, "Error connecting to the database", http.StatusInternalServerError)
+		return
+	}
+	defer database.Close()
+
+	rows, err := database.Query("SELECT id_penilaian, id_nilai, nama_nilai, nilai, bobot FROM penilaian")
+	if err != nil {
+		http.Error(w, "Error querying database", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var penilaians []models.Penilaian
+	for rows.Next() {
+		var penilaian models.Penilaian
+		if err := rows.Scan(&penilaian.IDPenilaian, &penilaian.IDNilai, &penilaian.NamaNilai, &penilaian.Nilai, &penilaian.Bobot); err != nil {
+			log.Println("Error scanning row:", err)
+			continue
+		}
+		penilaians = append(penilaians, penilaian)
+	}
+
+	if err := rows.Err(); err != nil {
+		http.Error(w, "Error processing rows", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(penilaians)
+}
+
+
+
+
+
+
+
 
 
 
