@@ -1248,56 +1248,73 @@ func CreatePenilaianHandler(w http.ResponseWriter, r *http.Request) {
 	dbConn, err := db.ConnectToDB()
 	if err != nil {
 		http.Error(w, "Gagal koneksi ke database", http.StatusInternalServerError)
+		log.Printf("DB Connection Error: %v\n", err)
 		return
 	}
 	defer dbConn.Close()
 
 	var penilaian models.Penilaian
 	if err := json.NewDecoder(r.Body).Decode(&penilaian); err != nil {
-		http.Error(w, "Gagal membaca data", http.StatusBadRequest)
+		http.Error(w, "Gagal membaca data dari body", http.StatusBadRequest)
+		log.Printf("JSON Decode Error: %v\n", err)
 		return
 	}
 
-	// Pastikan id_nilai valid (FK constraint)
-	var exists bool
-	err = dbConn.QueryRow("SELECT EXISTS(SELECT 1 FROM nilai WHERE id_nilai = $1)", penilaian.IDNilai).Scan(&exists)
-	if err != nil {
-		http.Error(w, "Gagal mengecek id_nilai", http.StatusInternalServerError)
-		return
-	}
-	if !exists {
-		http.Error(w, "id_nilai tidak ditemukan", http.StatusBadRequest)
+	// Step 1: Cari atau buat id_nilai
+	var idNilai int
+	err = dbConn.QueryRow(`
+		SELECT id_nilai FROM nilai WHERE id_mapel = $1 AND id_siswa = $2
+	`, penilaian.IDMapel, penilaian.IDSiswa).Scan(&idNilai)
+
+	if err == sql.ErrNoRows {
+		err = dbConn.QueryRow(`
+			INSERT INTO nilai (id_mapel, id_siswa, total_nilai)
+			VALUES ($1, $2, 0) RETURNING id_nilai
+		`, penilaian.IDMapel, penilaian.IDSiswa).Scan(&idNilai)
+
+		if err != nil {
+			http.Error(w, "Gagal membuat entri nilai", http.StatusInternalServerError)
+			log.Printf("Insert nilai Error: %v\n", err)
+			return
+		}
+	} else if err != nil {
+		http.Error(w, "Gagal mengambil id_nilai", http.StatusInternalServerError)
+		log.Printf("QueryRow id_nilai Error: %v\n", err)
 		return
 	}
 
-	// Convert bobot string ke float (e.g. "20.00%" => 0.2)
+	// Step 2: Konversi bobot dari string ke float
 	bobotFloat, err := strconv.ParseFloat(strings.TrimSuffix(penilaian.Bobot, "%"), 64)
 	if err != nil {
-		http.Error(w, "Format bobot salah", http.StatusBadRequest)
+		http.Error(w, "Format bobot tidak valid", http.StatusBadRequest)
+		log.Printf("Bobot Parse Error: %v\n", err)
 		return
 	}
-	bobotFloat = bobotFloat / 100
+	bobotFloat = bobotFloat / 100 // ubah ke desimal (contoh: 30% jadi 0.3)
 
-	// Insert dan ambil id_penilaian yang baru
+	// Step 3: Tambah ke tabel penilaian
 	var idPenilaian int
 	err = dbConn.QueryRow(`
 		INSERT INTO penilaian (id_nilai, nama_nilai, nilai, bobot)
 		VALUES ($1, $2, $3, $4)
 		RETURNING id_penilaian
-	`, penilaian.IDNilai, penilaian.NamaNilai, penilaian.Nilai, bobotFloat).Scan(&idPenilaian)
+	`, idNilai, penilaian.NamaNilai, penilaian.Nilai, bobotFloat).Scan(&idPenilaian)
 
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Insert error: %v", err), http.StatusInternalServerError)
+		http.Error(w, "Gagal menyimpan penilaian", http.StatusInternalServerError)
+		log.Printf("Insert penilaian Error: %v\n", err)
 		return
 	}
 
-	// Siapkan response JSON
+	// Step 4: Siapkan respon
 	response := models.Penilaian{
 		IDPenilaian: idPenilaian,
-		IDNilai:     penilaian.IDNilai,
+		IDNilai:     idNilai,
+		IDMapel:     penilaian.IDMapel,
+		IDSiswa:     penilaian.IDSiswa,
 		NamaNilai:   penilaian.NamaNilai,
 		Nilai:       penilaian.Nilai,
-		Bobot:       fmt.Sprintf("%.2f%%", bobotFloat*100), // kembalikan ke format string persen
+		Bobot:       fmt.Sprintf("%.2f%%", bobotFloat*100),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
