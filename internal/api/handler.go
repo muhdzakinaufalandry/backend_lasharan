@@ -779,44 +779,54 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 
 // Handler
 func GetKelasByGuru(w http.ResponseWriter, r *http.Request) {
-    vars := mux.Vars(r)
-    idGuruStr := vars["id_guru"]
-    log.Println("id_guru dari URL:", idGuruStr) // debug log
+	vars := mux.Vars(r)
+	idGuruStr := vars["id_guru"]
+	log.Println("id_guru dari URL:", idGuruStr)
 
-    idGuru, err := strconv.Atoi(idGuruStr)
-    if err != nil {
-        http.Error(w, "id_guru harus berupa angka", http.StatusBadRequest)
-        return
-    }
+	idGuru, err := strconv.Atoi(idGuruStr)
+	if err != nil {
+		http.Error(w, "id_guru harus berupa angka", http.StatusBadRequest)
+		return
+	}
 
-    dbConn, err := db.ConnectToDB()
-    if err != nil {
-        http.Error(w, "Gagal konek database", http.StatusInternalServerError)
-        return
-    }
-    defer dbConn.Close()
+	dbConn, err := db.ConnectToDB()
+	if err != nil {
+		http.Error(w, "Gagal konek database", http.StatusInternalServerError)
+		return
+	}
+	defer dbConn.Close()
 
-    rows, err := dbConn.Query("SELECT id_kelas, id_guru, nama_kelas, tahun_ajaran FROM kelas WHERE id_guru = $1", idGuru)
-    if err != nil {
-        log.Println("Query error:", err)
-        http.Error(w, "Query error", http.StatusInternalServerError)
-        return
-    }
-    defer rows.Close()
+	query := `
+		SELECT 
+			k.id_kelas, k.id_guru, k.nama_kelas, k.tahun_ajaran,
+			(SELECT COUNT(*) FROM siswa s WHERE s.id_kelas = k.id_kelas) AS jumlah_siswa
+		FROM kelas k
+		WHERE k.id_guru = $1
+	`
 
-    var kelasList []models.Kelas
-    for rows.Next() {
-        var k models.Kelas
-        if err := rows.Scan(&k.IDKelas, &k.IDGuru, &k.NamaKelas, &k.TahunAjaran); err != nil {
-            log.Println("Scan error:", err)
-            continue
-        }
-        kelasList = append(kelasList, k)
-    }
+	rows, err := dbConn.Query(query, idGuru)
+	if err != nil {
+		log.Println("Query error:", err)
+		http.Error(w, "Query error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
 
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(kelasList)
+	var kelasList []models.Kelas
+	for rows.Next() {
+		var k models.Kelas
+		err := rows.Scan(&k.IDKelas, &k.IDGuru, &k.NamaKelas, &k.TahunAjaran, &k.JumlahSiswa)
+		if err != nil {
+			log.Println("Scan error:", err)
+			continue
+		}
+		kelasList = append(kelasList, k)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(kelasList)
 }
+
 
 
 // Handler untuk mendapatkan id_guru berdasarkan id_user
@@ -980,7 +990,7 @@ func GetSiswaByKelas(w http.ResponseWriter, r *http.Request) {
     defer dbConn.Close()
 
     rows, err := dbConn.Query(`
-        SELECT id_siswa, id_kelas, id_user, nama_siswa, alamat, tanggal_lahir 
+        SELECT id_siswa, id_kelas, id_user, nama_siswa, alamat, tanggal_lahir, nisn 
         FROM siswa 
         WHERE id_kelas = $1`, idKelas)
     if err != nil {
@@ -992,7 +1002,7 @@ func GetSiswaByKelas(w http.ResponseWriter, r *http.Request) {
     var siswaList []models.Siswa
     for rows.Next() {
         var siswa models.Siswa
-        if err := rows.Scan(&siswa.IDSiswa, &siswa.IDKelas, &siswa.IDUser, &siswa.NamaSiswa, &siswa.Alamat, &siswa.TanggalLahir); err != nil {
+        if err := rows.Scan(&siswa.IDSiswa, &siswa.IDKelas, &siswa.IDUser, &siswa.NamaSiswa, &siswa.Alamat, &siswa.TanggalLahir, &siswa.NISN); err != nil {
             log.Println("Scan error:", err)
             continue
         }
@@ -1124,7 +1134,7 @@ func GetStudentsByMapelID(w http.ResponseWriter, r *http.Request) {
 
 	// Ambil data siswa berdasarkan id_kelas
 	rows, err := dbConn.Query(`
-		SELECT id_siswa, id_kelas, id_user, nama_siswa, alamat, tanggal_lahir 
+		SELECT id_siswa, id_kelas, id_user, nama_siswa, alamat, tanggal_lahir, nisn 
 		FROM siswa 
 		WHERE id_kelas = $1
 	`, idKelas)
@@ -1138,7 +1148,7 @@ func GetStudentsByMapelID(w http.ResponseWriter, r *http.Request) {
 
 	for rows.Next() {
 		var s models.Siswa
-		err := rows.Scan(&s.IDSiswa, &s.IDKelas, &s.IDUser, &s.NamaSiswa, &s.Alamat, &s.TanggalLahir)
+		err := rows.Scan(&s.IDSiswa, &s.IDKelas, &s.IDUser, &s.NamaSiswa, &s.Alamat, &s.TanggalLahir, &s.NISN)
 		if err != nil {
 			http.Error(w, "Gagal membaca data siswa", http.StatusInternalServerError)
 			return
