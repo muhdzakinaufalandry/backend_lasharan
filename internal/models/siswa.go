@@ -8,4 +8,5 @@ type Siswa struct {
     NamaSiswa     string    `json:"nama_siswa"`
 	Alamat     	  string    `json:"alamat"`
     TanggalLahir  string 	`json:"tanggal_lahir"`  // Tipe data time.Time untuk tanggal
+	NISN           string 	`json:"nisn"`
 }

@@ -22,7 +22,7 @@ func GetGuruHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer database.Close()
 
-	rows, err := database.Query("SELECT id_guru, id_user, id_mapel, nama_guru, mata_pelajaran FROM guru")
+	rows, err := database.Query("SELECT id_guru, id_user, id_mapel, nama_guru, mata_pelajaran, nip, alamat, email, no_telp FROM guru")
 	if err != nil {
 		http.Error(w, "Error querying database", http.StatusInternalServerError)
 		return
@@ -32,7 +32,7 @@ func GetGuruHandler(w http.ResponseWriter, r *http.Request) {
 	var gurus []models.Guru
 	for rows.Next() {
 		var guru models.Guru
-		if err := rows.Scan(&guru.IDGuru, &guru.IDUser, &guru.IDMapel, &guru.NamaGuru, &guru.MataPelajaran); err != nil {
+		if err := rows.Scan(&guru.IDGuru, &guru.IDUser, &guru.IDMapel, &guru.NamaGuru, &guru.MataPelajaran, &guru.NIP, &guru.Alamat, &guru.Email, &guru.NoTelp); err != nil {
 			log.Println("Error scanning row:", err)
 			continue
 		}
@@ -71,8 +71,8 @@ func CreateGuruHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := "INSERT INTO guru (id_user, id_mapel, nama_guru, mata_pelajaran) VALUES ($1, $2, $3, $4)"
-	_, err = database.Exec(query, guru.IDUser, guru.IDMapel, guru.NamaGuru, guru.MataPelajaran)
+	query := "INSERT INTO guru (id_user, id_mapel, nama_guru, mata_pelajaran, nip, alamat, email, no_telp) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+	_, err = database.Exec(query, guru.IDUser, guru.IDMapel, guru.NamaGuru, guru.MataPelajaran, guru.NIP, guru.Alamat, guru.Email, guru.NoTelp)
 	if err != nil {
 		log.Println("Insert error:", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -102,8 +102,8 @@ func UpdateGuruHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = database.Exec(
-		"UPDATE guru SET id_user=$1, id_mapel=$2, nama_guru=$3, mata_pelajaran=$4 WHERE id_guru=$5",
-		guru.IDUser, guru.IDMapel, guru.NamaGuru, guru.MataPelajaran, id,
+		"UPDATE guru SET id_user=$1, id_mapel=$2, nama_guru=$3, mata_pelajaran=$4, nip=$5, alamat=$6, email=$7, no_telp=$8 WHERE id_guru=$9",
+		guru.IDUser, guru.IDMapel, guru.NamaGuru, guru.MataPelajaran, guru.NIP, guru.Alamat, guru.Email, guru.NoTelp, id,
 	)
 	if err != nil {
 		http.Error(w, "Error updating data in the database", http.StatusInternalServerError)
@@ -168,8 +168,8 @@ func GetGuruByIDHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Query untuk mendapatkan data guru berdasarkan ID
 	var guru models.Guru
-	err = database.QueryRow("SELECT id_guru, id_user, id_mapel, nama_guru, mata_pelajaran FROM guru WHERE id_guru=$1", id).
-		Scan(&guru.IDGuru, &guru.IDUser, &guru.IDMapel, &guru.NamaGuru, &guru.MataPelajaran)
+	err = database.QueryRow("SELECT id_guru, id_user, id_mapel, nama_guru, mata_pelajaran, nip, alamat, email, no_telp FROM guru WHERE id_guru=$1", id).
+		Scan(&guru.IDGuru, &guru.IDUser, &guru.IDMapel, &guru.NamaGuru, &guru.MataPelajaran, &guru.NIP, &guru.Alamat, &guru.Email, &guru.NoTelp)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "Guru not found", http.StatusNotFound)
@@ -193,7 +193,7 @@ func GetSiswaHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer database.Close()
 
-	rows, err := database.Query("SELECT id_siswa, id_user, id_kelas, nama_siswa, alamat, tanggal_lahir FROM siswa")
+	rows, err := database.Query("SELECT id_siswa, id_user, id_kelas, nama_siswa, alamat, tanggal_lahir, nisn FROM siswa")
 	if err != nil {
 		http.Error(w, "Error querying database", http.StatusInternalServerError)
 		return
@@ -203,7 +203,7 @@ func GetSiswaHandler(w http.ResponseWriter, r *http.Request) {
 	var siswas []models.Siswa
 	for rows.Next() {
 		var siswa models.Siswa
-		if err := rows.Scan(&siswa.IDSiswa, &siswa.IDUser, &siswa.IDKelas, &siswa.NamaSiswa, &siswa.Alamat, &siswa.TanggalLahir); err != nil {
+		if err := rows.Scan(&siswa.IDSiswa, &siswa.IDUser, &siswa.IDKelas, &siswa.NamaSiswa, &siswa.Alamat, &siswa.TanggalLahir, &siswa.NISN); err != nil {
 			log.Println("Error scanning row:", err)
 			continue
 		}
@@ -242,8 +242,8 @@ func CreateSiswaHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := "INSERT INTO siswa (id_user, id_kelas, nama_siswa, alamat, tanggal_lahir) VALUES ($1, $2, $3, $4, $5)"
-	_, err = database.Exec(query, siswa.IDUser, siswa.IDKelas, siswa.NamaSiswa, siswa.Alamat, siswa.TanggalLahir)
+	query := "INSERT INTO siswa (id_user, id_kelas, nama_siswa, alamat, tanggal_lahir, nisn) VALUES ($1, $2, $3, $4, $5, $6)"
+	_, err = database.Exec(query, siswa.IDUser, siswa.IDKelas, siswa.NamaSiswa, siswa.Alamat, siswa.TanggalLahir, siswa.NISN)
 	if err != nil {
 		log.Println("Insert error:", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -273,8 +273,8 @@ func UpdateSiswaHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = database.Exec(
-		"UPDATE siswa SET id_user=$1, id_kelas=$2, nama_siswa=$3, alamat=$4, tanggal_lahir=$5 WHERE id_siswa=$6",
-		siswa.IDUser, siswa.IDKelas, siswa.NamaSiswa, siswa.Alamat, siswa.TanggalLahir, id,
+		"UPDATE siswa SET id_user=$1, id_kelas=$2, nama_siswa=$3, alamat=$4, tanggal_lahir=$5, nisn=$6 WHERE id_siswa=$7",
+		siswa.IDUser, siswa.IDKelas, siswa.NamaSiswa, siswa.Alamat, siswa.TanggalLahir, siswa.NISN, id,
 	)
 	if err != nil {
 		http.Error(w, "Error updating data in the database", http.StatusInternalServerError)
@@ -339,8 +339,8 @@ func GetSiswaByIDHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Query untuk mendapatkan data siswa berdasarkan ID
 	var siswa models.Siswa
-	err = database.QueryRow("SELECT id_siswa,id_user, id_kelas, nama_siswa, alamat, tanggal_lahir FROM siswa WHERE id_siswa=$1", id).
-		Scan(&siswa.IDSiswa, &siswa.IDUser, &siswa.IDKelas, &siswa.NamaSiswa, &siswa.Alamat, &siswa.TanggalLahir)
+	err = database.QueryRow("SELECT id_siswa,id_user, id_kelas, nama_siswa, alamat, tanggal_lahir, nisn FROM siswa WHERE id_siswa=$1", id).
+		Scan(&siswa.IDSiswa, &siswa.IDUser, &siswa.IDKelas, &siswa.NamaSiswa, &siswa.Alamat, &siswa.TanggalLahir, &siswa.NISN)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "Siswa not found", http.StatusNotFound)
@@ -1409,6 +1409,173 @@ func GetPenilaianHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(penilaians)
 }
+
+func GetUserHandler(w http.ResponseWriter, r *http.Request) {
+	database, err := db.ConnectToDB()
+	if err != nil {
+		http.Error(w, "Error connecting to the database", http.StatusInternalServerError)
+		return
+	}
+	defer database.Close()
+
+	rows, err := database.Query(`SELECT id_user, username, password, id_role, tanggal_registrasi FROM "user"`)
+	if err != nil {
+		http.Error(w, "Error querying database", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var users []models.User
+	for rows.Next() {
+		var user models.User
+		if err := rows.Scan(&user.IDUser, &user.Username, &user.Password, &user.IDRole, &user.TanggalRegistrasi); err != nil {
+			log.Println("Error scanning row:", err)
+			continue
+		}
+		users = append(users, user)
+	}
+
+	if err := rows.Err(); err != nil {
+		http.Error(w, "Error processing rows", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(users)
+}
+
+func CreateUserHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	database, err := db.ConnectToDB()
+	if err != nil {
+		log.Println("DB connect error:", err)
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	defer database.Close()
+
+	var user models.User
+	err = json.NewDecoder(r.Body).Decode(&user)
+	if err != nil {
+		log.Println("JSON decode error:", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	query := `INSERT INTO "user" (username, password, id_role, tanggal_registrasi) VALUES ($1, $2, $3, $4)`
+	_, err = database.Exec(query, user.Username, user.Password, user.IDRole, user.TanggalRegistrasi)
+	if err != nil {
+		log.Println("Insert error:", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Println("User berhasil ditambahkan:", user)
+	w.WriteHeader(http.StatusCreated)
+	w.Write([]byte("User berhasil ditambahkan"))
+}
+
+func UpdateUserHandler(w http.ResponseWriter, r *http.Request) {
+	database, err := db.ConnectToDB()
+	if err != nil {
+		http.Error(w, "Error connecting to the database", http.StatusInternalServerError)
+		return
+	}
+	defer database.Close()
+
+	id := mux.Vars(r)["id"]
+
+	var user models.User
+	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
+		http.Error(w, "Error parsing request body", http.StatusBadRequest)
+		return
+	}
+
+	_, err = database.Exec(
+		`UPDATE "user" SET username=$1, password=$2, id_role=$3, tanggal_registrasi=$4 WHERE id_user=$5`,
+		user.Username, user.Password, user.IDRole, user.TanggalRegistrasi, id,
+	)
+	if err != nil {
+		http.Error(w, "Error updating data in the database", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(user)
+}
+
+func DeleteUserHandler(w http.ResponseWriter, r *http.Request) {
+	database, err := db.ConnectToDB()
+	if err != nil {
+		http.Error(w, "Error connecting to the database", http.StatusInternalServerError)
+		return
+	}
+	defer database.Close()
+
+	id := mux.Vars(r)["id"]
+	log.Println("Deleting user with ID:", id) // Log ID yang akan dihapus
+
+	// Menghapus user dari database berdasarkan id_user
+	result, err := database.Exec(`DELETE FROM "user" WHERE id_user=$1`, id)
+	if err != nil {
+		log.Println("Error deleting from database:", err)
+		http.Error(w, "Error deleting data from the database", http.StatusInternalServerError)
+		return
+	}
+
+	// Mengecek apakah baris data benar-benar terhapus
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		log.Println("Error checking rows affected:", err)
+		http.Error(w, "Error checking affected rows", http.StatusInternalServerError)
+		return
+	}
+
+	if rowsAffected == 0 {
+		log.Println("No user found with ID:", id)
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	log.Println("User successfully deleted with ID:", id)
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("User berhasil dihapus"))
+}
+
+func GetUserByIDHandler(w http.ResponseWriter, r *http.Request) {
+	// Mengambil ID dari URL parameter
+	id := mux.Vars(r)["id"]
+
+	// Membuka koneksi ke database
+	database, err := db.ConnectToDB()
+	if err != nil {
+		http.Error(w, "Error connecting to the database", http.StatusInternalServerError)
+		return
+	}
+	defer database.Close()
+
+	// Query untuk mendapatkan data user berdasarkan ID
+	var user models.User
+	err = database.QueryRow(`SELECT id_user, username, password, id_role, tanggal_registrasi FROM "user" WHERE id_user=$1`, id).
+		Scan(&user.IDUser, &user.Username, &user.Password, &user.IDRole, &user.TanggalRegistrasi)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "User not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Error querying database", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Mengirimkan data user dalam format JSON
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(user)
+}
+
 
 
 

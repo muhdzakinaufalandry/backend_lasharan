@@ -64,6 +64,12 @@ func main() {
 	r.HandleFunc("/penilaian/{id}", api.UpdatePenilaianHandler).Methods("PUT")
 	r.HandleFunc("/penilaian/{id}", api.DeletePenilaianHandler).Methods("DELETE")
 
+	r.HandleFunc("/user", api.CreateUserHandler).Methods("POST")
+	r.HandleFunc("/user", api.GetUserHandler).Methods("GET")
+	r.HandleFunc("/user/{id}", api.UpdateUserHandler).Methods("PUT")
+	r.HandleFunc("/user/{id}", api.DeleteUserHandler).Methods("DELETE")
+	r.HandleFunc("/user/{id}", api.GetUserByIDHandler).Methods("GET")
+
 	
 
 
