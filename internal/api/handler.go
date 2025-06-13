@@ -593,8 +593,12 @@ func CreateMataPelajaranHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Println("Mata Pelajaran berhasil ditambahkan:", mataPelajaran)
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte("Mata Pelajaran berhasil ditambahkan"))
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Mata Pelajaran berhasil ditambahkan",
+	})
+
 }
 
 // UpdateMataPelajaranHandler - Mengupdate data mata pelajaran berdasarkan ID
