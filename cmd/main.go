@@ -6,9 +6,11 @@ import (
 	"myapp/internal/api"  // Pastikan path impor sesuai dengan folder proyek kamu
 	"github.com/rs/cors"
 	"github.com/gorilla/mux"
+	"myapp/config"
 )
 
 func main() {
+	config.InitS3()
 	// Membuat router
 	r := mux.NewRouter()
 
