@@ -626,6 +626,7 @@ func GetMataPelajaranHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(mataPelajaran)
 }
 
+
 // CreateMataPelajaranHandler - Menambahkan data mata pelajaran baru
 func CreateMataPelajaranHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -649,22 +650,23 @@ func CreateMataPelajaranHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := "INSERT INTO mata_pelajaran (id_kelas, nama_mata_pelajaran) VALUES ($1,$2)"
-	_, err = database.Exec(query, mataPelajaran.IDKelas,mataPelajaran.NamaMataPelajaran)
+	// INSERT dan kembalikan ID
+	err = database.QueryRow(
+		"INSERT INTO mata_pelajaran (id_kelas, nama_mata_pelajaran) VALUES ($1, $2) RETURNING id_mapel",
+		mataPelajaran.IDKelas, mataPelajaran.NamaMataPelajaran,
+	).Scan(&mataPelajaran.IDMapel)
 	if err != nil {
 		log.Println("Insert error:", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Println("Mata Pelajaran berhasil ditambahkan:", mataPelajaran)
+	// response = objek lengkap
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{
-		"message": "Mata Pelajaran berhasil ditambahkan",
-	})
-
+	json.NewEncoder(w).Encode(mataPelajaran)
 }
+
 
 // UpdateMataPelajaranHandler - Mengupdate data mata pelajaran berdasarkan ID
 func UpdateMataPelajaranHandler(w http.ResponseWriter, r *http.Request) {
@@ -683,6 +685,15 @@ func UpdateMataPelajaranHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+
+	// ✅ Tambahkan baris ini untuk memastikan ID-nya ikut dikembalikan
+	idInt, err := strconv.Atoi(id)
+	if err != nil {
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		return
+	}
+	mataPelajaran.IDMapel = idInt
+
 	_, err = database.Exec(
 		"UPDATE mata_pelajaran SET id_kelas=$1, nama_mata_pelajaran=$2 WHERE id_mapel=$3",
 		 mataPelajaran.IDKelas, mataPelajaran.NamaMataPelajaran, id,
@@ -692,8 +703,10 @@ func UpdateMataPelajaranHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(mataPelajaran)
+
 }
 
 // DeleteMataPelajaranHandler - Menghapus data mata pelajaran berdasarkan ID
