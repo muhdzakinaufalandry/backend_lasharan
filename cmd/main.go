@@ -72,6 +72,10 @@ func main() {
 	r.HandleFunc("/user/{id}", api.DeleteUserHandler).Methods("DELETE")
 	r.HandleFunc("/user/{id}", api.GetUserByIDHandler).Methods("GET")
 
+	r.HandleFunc("/nilai/user/{id_user}", api.GetNilaiByUserIDHandler).Methods("GET")
+
+
+
 	
 	r.HandleFunc("/upload-foto-guru", api.UploadFotoGuruHandler).Methods("POST")
 	r.HandleFunc("/upload-foto-siswa", api.UploadFotoSiswaHandler).Methods("POST")

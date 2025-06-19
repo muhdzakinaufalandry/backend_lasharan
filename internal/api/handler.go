@@ -1187,7 +1187,7 @@ func GetStudentsByMapelID(w http.ResponseWriter, r *http.Request) {
 
 	// Ambil data siswa berdasarkan id_kelas
 	rows, err := dbConn.Query(`
-		SELECT id_siswa, id_kelas, id_user, nama_siswa, alamat, tanggal_lahir, nisn 
+		SELECT id_siswa, id_kelas, id_user, nama_siswa, alamat, tanggal_lahir, nisn, COALESCE(foto, '') 
 		FROM siswa 
 		WHERE id_kelas = $1
 	`, idKelas)
@@ -1201,7 +1201,7 @@ func GetStudentsByMapelID(w http.ResponseWriter, r *http.Request) {
 
 	for rows.Next() {
 		var s models.Siswa
-		err := rows.Scan(&s.IDSiswa, &s.IDKelas, &s.IDUser, &s.NamaSiswa, &s.Alamat, &s.TanggalLahir, &s.NISN)
+		err := rows.Scan(&s.IDSiswa, &s.IDKelas, &s.IDUser, &s.NamaSiswa, &s.Alamat, &s.TanggalLahir, &s.NISN, &s.Foto)
 		if err != nil {
 			http.Error(w, "Gagal membaca data siswa", http.StatusInternalServerError)
 			return
@@ -1815,6 +1815,67 @@ func UploadFotoSiswaHandler(w http.ResponseWriter, r *http.Request) {
 		"url":     s3URL,
 	})
 }
+
+func GetNilaiByUserIDHandler(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	idUserStr := vars["id_user"]
+	idUser, err := strconv.Atoi(idUserStr)
+	if err != nil {
+		http.Error(w, "ID user tidak valid", http.StatusBadRequest)
+		return
+	}
+
+	dbConn, err := db.ConnectToDB()
+	if err != nil {
+		http.Error(w, "Gagal koneksi ke database", http.StatusInternalServerError)
+		return
+	}
+	defer dbConn.Close()
+
+	var idSiswa int
+	err = dbConn.QueryRow("SELECT id_siswa FROM siswa WHERE id_user = $1", idUser).Scan(&idSiswa)
+	if err != nil {
+		http.Error(w, "Gagal menemukan siswa dari user", http.StatusNotFound)
+		return
+	}
+
+	query := `
+		SELECT n.id_nilai, n.total_nilai, m.nama_mata_pelajaran
+		FROM nilai n
+		JOIN mata_pelajaran m ON n.id_mapel = m.id_mapel
+		WHERE n.id_siswa = $1
+	`
+	rows, err := dbConn.Query(query, idSiswa)
+	if err != nil {
+		http.Error(w, "Query gagal (nilai)", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	type NilaiDetail struct {
+		ID    int     `json:"id_nilai"`
+		Nilai float64 `json:"nilai"`
+		Mapel string  `json:"mapel"`
+	}
+
+	var nilaiList []NilaiDetail
+	for rows.Next() {
+		var nd NilaiDetail
+		err := rows.Scan(&nd.ID, &nd.Nilai, &nd.Mapel)
+		if err != nil {
+			http.Error(w, "Gagal membaca data nilai", http.StatusInternalServerError)
+			return
+		}
+		nilaiList = append(nilaiList, nd)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(nilaiList)
+}
+
+
+
+
 
 
 
