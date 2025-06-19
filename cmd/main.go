@@ -74,6 +74,8 @@ func main() {
 
 	r.HandleFunc("/nilai/user/{id_user}", api.GetNilaiByUserIDHandler).Methods("GET")
 
+	r.HandleFunc("/siswa/tambah/{id_siswa}", api.UpdateSiswaClassHandler).Methods("PUT")
+
 
 
 	

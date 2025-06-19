@@ -270,22 +270,38 @@ func CreateSiswaHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Query dengan RETURNING
-	query := `
-		INSERT INTO siswa (id_user, id_kelas, nama_siswa, alamat, tanggal_lahir, nisn)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING id_siswa
-	`
-
 	var idSiswa int
-	err = database.QueryRow(query,
-		siswa.IDUser,
-		siswa.IDKelas,
-		siswa.NamaSiswa,
-		siswa.Alamat,
-		siswa.TanggalLahir,
-		siswa.NISN,
-	).Scan(&idSiswa)
+
+	if siswa.IDKelas != nil && *siswa.IDKelas != 0  {
+		// Jika id_kelas ada
+		query := `
+			INSERT INTO siswa (id_user, id_kelas, nama_siswa, alamat, tanggal_lahir, nisn)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			RETURNING id_siswa
+		`
+		err = database.QueryRow(query,
+			siswa.IDUser,
+			siswa.IDKelas,
+			siswa.NamaSiswa,
+			siswa.Alamat,
+			siswa.TanggalLahir,
+			siswa.NISN,
+		).Scan(&idSiswa)
+	} else {
+		// Jika id_kelas tidak diisi
+		query := `
+			INSERT INTO siswa (id_user, nama_siswa, alamat, tanggal_lahir, nisn)
+			VALUES ($1, $2, $3, $4, $5)
+			RETURNING id_siswa
+		`
+		err = database.QueryRow(query,
+			siswa.IDUser,
+			siswa.NamaSiswa,
+			siswa.Alamat,
+			siswa.TanggalLahir,
+			siswa.NISN,
+		).Scan(&idSiswa)
+	}
 
 	if err != nil {
 		log.Println("Insert error:", err)
@@ -295,13 +311,13 @@ func CreateSiswaHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Siswa berhasil ditambahkan: %+v dengan ID: %d\n", siswa, idSiswa)
 
-	// Kirim response JSON berisi ID siswa
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message":   "Siswa berhasil ditambahkan",
-		"id_siswa":  idSiswa,
+		"message":  "Siswa berhasil ditambahkan",
+		"id_siswa": idSiswa,
 	})
 }
+
 
 
 // UpdateSiswaHandler - Mengupdate data siswa berdasarkan ID
@@ -1872,6 +1888,50 @@ func GetNilaiByUserIDHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(nilaiList)
 }
+
+func UpdateSiswaClassHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	vars := mux.Vars(r)
+	idSiswaStr := vars["id_siswa"]
+
+	idSiswa, err := strconv.Atoi(idSiswaStr)
+	if err != nil {
+		http.Error(w, "ID siswa tidak valid", http.StatusBadRequest)
+		return
+	}
+
+	type RequestPayload struct {
+		IdKelas int `json:"id_kelas"`
+	}
+
+	var payload RequestPayload
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "Payload tidak valid", http.StatusBadRequest)
+		return
+	}
+
+	dbConn, err := db.ConnectToDB()
+	if err != nil {
+		http.Error(w, "Gagal koneksi ke database", http.StatusInternalServerError)
+		return
+	}
+	defer dbConn.Close()
+
+	// Eksekusi query update
+	query := `UPDATE siswa SET id_kelas = $1 WHERE id_siswa = $2`
+	_, err = dbConn.Exec(query, payload.IdKelas, idSiswa)
+	if err != nil {
+		http.Error(w, "Gagal memasukkan siswa ke kelas", http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Siswa berhasil dimasukkan ke kelas",
+	})
+}
+
+
 
 
 

@@ -3,7 +3,7 @@ package models
 
 type Siswa struct {
     IDSiswa       int       `json:"id_siswa"`
-	IDKelas       int       `json:"id_kelas"`
+	IDKelas       *int       `json:"id_kelas"`
 	IDUser        int       `json:"id_user"`
     NamaSiswa     string    `json:"nama_siswa"`
 	Alamat     	  string    `json:"alamat"`
