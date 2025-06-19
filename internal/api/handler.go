@@ -11,6 +11,13 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
+	"path/filepath"
+	"io"
+	"myapp/config"
+	"context"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 // GetGuruHandler - Mendapatkan semua data guru
@@ -22,7 +29,7 @@ func GetGuruHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer database.Close()
 
-	rows, err := database.Query("SELECT id_guru, id_user, id_mapel, nama_guru, mata_pelajaran, nip, alamat, email, no_telp FROM guru")
+	rows, err := database.Query("SELECT id_guru, id_user, id_mapel, nama_guru, mata_pelajaran, nip, alamat, email, no_telp, COALESCE(foto, '') FROM guru")
 	if err != nil {
 		http.Error(w, "Error querying database", http.StatusInternalServerError)
 		return
@@ -32,7 +39,7 @@ func GetGuruHandler(w http.ResponseWriter, r *http.Request) {
 	var gurus []models.Guru
 	for rows.Next() {
 		var guru models.Guru
-		if err := rows.Scan(&guru.IDGuru, &guru.IDUser, &guru.IDMapel, &guru.NamaGuru, &guru.MataPelajaran, &guru.NIP, &guru.Alamat, &guru.Email, &guru.NoTelp); err != nil {
+		if err := rows.Scan(&guru.IDGuru, &guru.IDUser, &guru.IDMapel, &guru.NamaGuru, &guru.MataPelajaran, &guru.NIP, &guru.Alamat, &guru.Email, &guru.NoTelp, &guru.Foto); err != nil {
 			log.Println("Error scanning row:", err)
 			continue
 		}
@@ -49,7 +56,7 @@ func GetGuruHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // CreateGuruHandler - Menambahkan data guru baru
-func CreateGuruHandler(w http.ResponseWriter, r *http.Request) {
+ func CreateGuruHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -71,18 +78,39 @@ func CreateGuruHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := "INSERT INTO guru (id_user, id_mapel, nama_guru, mata_pelajaran, nip, alamat, email, no_telp) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
-	_, err = database.Exec(query, guru.IDUser, guru.IDMapel, guru.NamaGuru, guru.MataPelajaran, guru.NIP, guru.Alamat, guru.Email, guru.NoTelp)
+	query := `
+		INSERT INTO guru (id_user, id_mapel, nama_guru, mata_pelajaran, nip, alamat, email, no_telp)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id_guru
+	`
+
+	var idGuru int
+	err = database.QueryRow(query,
+		guru.IDUser,
+		guru.IDMapel,
+		guru.NamaGuru,
+		guru.MataPelajaran,
+		guru.NIP,
+		guru.Alamat,
+		guru.Email,
+		guru.NoTelp,
+	).Scan(&idGuru)
+
 	if err != nil {
 		log.Println("Insert error:", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Gagal menyimpan guru", http.StatusInternalServerError)
 		return
 	}
 
-	log.Println("Guru berhasil ditambahkan:", guru)
-	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte("Guru berhasil ditambahkan"))
+	response := map[string]interface{}{
+		"message":  "Guru berhasil ditambahkan",
+		"id_guru":  idGuru,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
+
 
 // UpdateGuruHandler - Mengupdate data guru berdasarkan ID
 func UpdateGuruHandler(w http.ResponseWriter, r *http.Request) {
@@ -102,8 +130,8 @@ func UpdateGuruHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = database.Exec(
-		"UPDATE guru SET id_user=$1, id_mapel=$2, nama_guru=$3, mata_pelajaran=$4, nip=$5, alamat=$6, email=$7, no_telp=$8 WHERE id_guru=$9",
-		guru.IDUser, guru.IDMapel, guru.NamaGuru, guru.MataPelajaran, guru.NIP, guru.Alamat, guru.Email, guru.NoTelp, id,
+		"UPDATE guru SET id_user=$1, id_mapel=$2, nama_guru=$3, mata_pelajaran=$4, nip=$5, alamat=$6, email=$7, no_telp=$8, foto=$9 WHERE id_guru=$10",
+		guru.IDUser, guru.IDMapel, guru.NamaGuru, guru.MataPelajaran, guru.NIP, guru.Alamat, guru.Email, guru.NoTelp, guru.Foto, id,
 	)
 	if err != nil {
 		http.Error(w, "Error updating data in the database", http.StatusInternalServerError)
@@ -168,8 +196,8 @@ func GetGuruByIDHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Query untuk mendapatkan data guru berdasarkan ID
 	var guru models.Guru
-	err = database.QueryRow("SELECT id_guru, id_user, id_mapel, nama_guru, mata_pelajaran, nip, alamat, email, no_telp FROM guru WHERE id_guru=$1", id).
-		Scan(&guru.IDGuru, &guru.IDUser, &guru.IDMapel, &guru.NamaGuru, &guru.MataPelajaran, &guru.NIP, &guru.Alamat, &guru.Email, &guru.NoTelp)
+	err = database.QueryRow("SELECT id_guru, id_user, id_mapel, nama_guru, mata_pelajaran, nip, alamat, email, no_telp, COALESCE(foto, '') FROM guru WHERE id_guru=$1", id).
+		Scan(&guru.IDGuru, &guru.IDUser, &guru.IDMapel, &guru.NamaGuru, &guru.MataPelajaran, &guru.NIP, &guru.Alamat, &guru.Email, &guru.NoTelp, &guru.Foto)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "Guru not found", http.StatusNotFound)
@@ -193,7 +221,7 @@ func GetSiswaHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer database.Close()
 
-	rows, err := database.Query("SELECT id_siswa, id_user, id_kelas, nama_siswa, alamat, tanggal_lahir, nisn FROM siswa")
+	rows, err := database.Query("SELECT id_siswa, id_user, id_kelas, nama_siswa, alamat, tanggal_lahir, nisn, COALESCE(foto, '') FROM siswa")
 	if err != nil {
 		http.Error(w, "Error querying database", http.StatusInternalServerError)
 		return
@@ -203,7 +231,7 @@ func GetSiswaHandler(w http.ResponseWriter, r *http.Request) {
 	var siswas []models.Siswa
 	for rows.Next() {
 		var siswa models.Siswa
-		if err := rows.Scan(&siswa.IDSiswa, &siswa.IDUser, &siswa.IDKelas, &siswa.NamaSiswa, &siswa.Alamat, &siswa.TanggalLahir, &siswa.NISN); err != nil {
+		if err := rows.Scan(&siswa.IDSiswa, &siswa.IDUser, &siswa.IDKelas, &siswa.NamaSiswa, &siswa.Alamat, &siswa.TanggalLahir, &siswa.NISN, &siswa.Foto); err != nil {
 			log.Println("Error scanning row:", err)
 			continue
 		}
@@ -242,18 +270,39 @@ func CreateSiswaHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := "INSERT INTO siswa (id_user, id_kelas, nama_siswa, alamat, tanggal_lahir, nisn) VALUES ($1, $2, $3, $4, $5, $6)"
-	_, err = database.Exec(query, siswa.IDUser, siswa.IDKelas, siswa.NamaSiswa, siswa.Alamat, siswa.TanggalLahir, siswa.NISN)
+	// Query dengan RETURNING
+	query := `
+		INSERT INTO siswa (id_user, id_kelas, nama_siswa, alamat, tanggal_lahir, nisn)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id_siswa
+	`
+
+	var idSiswa int
+	err = database.QueryRow(query,
+		siswa.IDUser,
+		siswa.IDKelas,
+		siswa.NamaSiswa,
+		siswa.Alamat,
+		siswa.TanggalLahir,
+		siswa.NISN,
+	).Scan(&idSiswa)
+
 	if err != nil {
 		log.Println("Insert error:", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Gagal menyimpan siswa", http.StatusInternalServerError)
 		return
 	}
 
-	log.Println("Siswa berhasil ditambahkan:", siswa)
-	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte("Siswa berhasil ditambahkan"))
+	log.Printf("Siswa berhasil ditambahkan: %+v dengan ID: %d\n", siswa, idSiswa)
+
+	// Kirim response JSON berisi ID siswa
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message":   "Siswa berhasil ditambahkan",
+		"id_siswa":  idSiswa,
+	})
 }
+
 
 // UpdateSiswaHandler - Mengupdate data siswa berdasarkan ID
 func UpdateSiswaHandler(w http.ResponseWriter, r *http.Request) {
@@ -273,8 +322,8 @@ func UpdateSiswaHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = database.Exec(
-		"UPDATE siswa SET id_user=$1, id_kelas=$2, nama_siswa=$3, alamat=$4, tanggal_lahir=$5, nisn=$6 WHERE id_siswa=$7",
-		siswa.IDUser, siswa.IDKelas, siswa.NamaSiswa, siswa.Alamat, siswa.TanggalLahir, siswa.NISN, id,
+		"UPDATE siswa SET id_user=$1, id_kelas=$2, nama_siswa=$3, alamat=$4, tanggal_lahir=$5, nisn=$6, foto=$7 WHERE id_siswa=$8",
+		siswa.IDUser, siswa.IDKelas, siswa.NamaSiswa, siswa.Alamat, siswa.TanggalLahir, siswa.NISN, siswa.Foto, id,
 	)
 	if err != nil {
 		http.Error(w, "Error updating data in the database", http.StatusInternalServerError)
@@ -339,8 +388,8 @@ func GetSiswaByIDHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Query untuk mendapatkan data siswa berdasarkan ID
 	var siswa models.Siswa
-	err = database.QueryRow("SELECT id_siswa,id_user, id_kelas, nama_siswa, alamat, tanggal_lahir, nisn FROM siswa WHERE id_siswa=$1", id).
-		Scan(&siswa.IDSiswa, &siswa.IDUser, &siswa.IDKelas, &siswa.NamaSiswa, &siswa.Alamat, &siswa.TanggalLahir, &siswa.NISN)
+	err = database.QueryRow("SELECT id_siswa,id_user, id_kelas, nama_siswa, alamat, tanggal_lahir, nisn, COALESCE(foto, '') FROM siswa WHERE id_siswa=$1", id).
+		Scan(&siswa.IDSiswa, &siswa.IDUser, &siswa.IDKelas, &siswa.NamaSiswa, &siswa.Alamat, &siswa.TanggalLahir, &siswa.NISN, &siswa.Foto)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "Siswa not found", http.StatusNotFound)
@@ -1607,6 +1656,165 @@ func GetUserByIDHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(user)
 }
 
+const (
+	bucketName = "lasharan-bucket"        // Ganti dengan nama bucket S3 kamu
+	s3GuruPath = "guru/"                   // Folder di S3 untuk menyimpan foto guru
+	s3SiswaPath = "siswa/"                   // Folder di S3 untuk menyimpan foto guru
+)
+
+func UploadFotoGuruHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("Start upload foto guru")
+
+	// 1. Parse multipart form
+	err := r.ParseMultipartForm(10 << 20) // 10MB
+	if err != nil {
+		http.Error(w, "Gagal parsing form", http.StatusBadRequest)
+		return
+	}
+
+	// 2. Ambil file foto
+	file, handler, err := r.FormFile("foto")
+	if err != nil {
+		http.Error(w, "File tidak ditemukan", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	// 3. Ambil ID guru
+	id := r.FormValue("id_guru")
+	if id == "" {
+		http.Error(w, "id_guru diperlukan", http.StatusBadRequest)
+		return
+	}
+
+	// 4. Generate nama file dan path di S3
+	fileExt := filepath.Ext(handler.Filename)
+	fileName := fmt.Sprintf("guru_%s_%d%s", id, time.Now().Unix(), fileExt)
+	s3Key := s3GuruPath + fileName
+
+	// 5. Deteksi content-type
+	buffer := make([]byte, 512)
+	_, err = file.Read(buffer)
+	if err != nil {
+		http.Error(w, "Gagal membaca file", http.StatusInternalServerError)
+		return
+	}
+	contentType := http.DetectContentType(buffer)
+	file.Seek(0, io.SeekStart) // Reset posisi
+
+	// 6. Upload ke S3
+	_, err = config.S3Client.PutObject(context.TODO(), &s3.PutObjectInput{
+		Bucket:      aws.String(bucketName),
+		Key:         aws.String(s3Key),
+		Body:        file,
+		ContentType: aws.String(contentType),
+	})
+	if err != nil {
+		log.Println("Upload ke S3 gagal:", err)
+		http.Error(w, "Gagal upload ke S3", http.StatusInternalServerError)
+		return
+	}
+
+	// 7. Simpan URL ke database
+	s3URL := fmt.Sprintf("https://%s.s3.ap-southeast-3.amazonaws.com/%s", bucketName, s3Key)
+
+	database, err := db.ConnectToDB()
+	if err != nil {
+		http.Error(w, "Gagal koneksi ke database", http.StatusInternalServerError)
+		return
+	}
+	defer database.Close()
+
+	_, err = database.Exec("UPDATE guru SET foto = $1 WHERE id_guru = $2", s3URL, id)
+	if err != nil {
+		http.Error(w, "Gagal update database", http.StatusInternalServerError)
+		return
+	}
+
+	// 8. Kirim respons sukses
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Foto guru berhasil diupload",
+		"url":     s3URL,
+	})
+}
+
+func UploadFotoSiswaHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("Start upload foto siswa")
+
+	// 1. Parse multipart form
+	err := r.ParseMultipartForm(10 << 20) // 10MB
+	if err != nil {
+		http.Error(w, "Gagal parsing form", http.StatusBadRequest)
+		return
+	}
+
+	// 2. Ambil file foto
+	file, handler, err := r.FormFile("foto")
+	if err != nil {
+		http.Error(w, "File tidak ditemukan", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	// 3. Ambil ID siswa
+	id := r.FormValue("id_siswa")
+	if id == "" {
+		http.Error(w, "id_siswa diperlukan", http.StatusBadRequest)
+		return
+	}
+
+	// 4. Generate nama file dan path di S3
+	fileExt := filepath.Ext(handler.Filename)
+	fileName := fmt.Sprintf("siswa_%s_%d%s", id, time.Now().Unix(), fileExt)
+	s3Key := s3SiswaPath + fileName
+
+	// 5. Deteksi content-type
+	buffer := make([]byte, 512)
+	_, err = file.Read(buffer)
+	if err != nil {
+		http.Error(w, "Gagal membaca file", http.StatusInternalServerError)
+		return
+	}
+	contentType := http.DetectContentType(buffer)
+	file.Seek(0, io.SeekStart) // Reset posisi
+
+	// 6. Upload ke S3
+	_, err = config.S3Client.PutObject(context.TODO(), &s3.PutObjectInput{
+		Bucket:      aws.String(bucketName),
+		Key:         aws.String(s3Key),
+		Body:        file,
+		ContentType: aws.String(contentType),
+	})
+	if err != nil {
+		log.Println("Upload ke S3 gagal:", err)
+		http.Error(w, "Gagal upload ke S3", http.StatusInternalServerError)
+		return
+	}
+
+	// 7. Simpan URL ke database
+	s3URL := fmt.Sprintf("https://%s.s3.ap-southeast-3.amazonaws.com/%s", bucketName, s3Key)
+
+	database, err := db.ConnectToDB()
+	if err != nil {
+		http.Error(w, "Gagal koneksi ke database", http.StatusInternalServerError)
+		return
+	}
+	defer database.Close()
+
+	_, err = database.Exec("UPDATE siswa SET foto = $1 WHERE id_siswa = $2", s3URL, id)
+	if err != nil {
+		http.Error(w, "Gagal update database", http.StatusInternalServerError)
+		return
+	}
+
+	// 8. Kirim respons sukses
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Foto siswa berhasil diupload",
+		"url":     s3URL,
+	})
+}
 
 
 

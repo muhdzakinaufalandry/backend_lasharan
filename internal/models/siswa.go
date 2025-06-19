@@ -9,4 +9,5 @@ type Siswa struct {
 	Alamat     	  string    `json:"alamat"`
     TanggalLahir  string 	`json:"tanggal_lahir"`  // Tipe data time.Time untuk tanggal
 	NISN           string 	`json:"nisn"`
+	Foto 		  string 	`json:"foto"`
 }

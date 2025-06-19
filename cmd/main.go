@@ -73,7 +73,8 @@ func main() {
 	r.HandleFunc("/user/{id}", api.GetUserByIDHandler).Methods("GET")
 
 	
-
+	r.HandleFunc("/upload-foto-guru", api.UploadFotoGuruHandler).Methods("POST")
+	r.HandleFunc("/upload-foto-siswa", api.UploadFotoSiswaHandler).Methods("POST")
 
 	
 

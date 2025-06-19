@@ -10,4 +10,5 @@ type Guru struct {
 	Alamat        string `json:"alamat"`
 	Email         string `json:"email"`
 	NoTelp        string `json:"no_telp"`
+	Foto		  string `json:"foto"`
 }
